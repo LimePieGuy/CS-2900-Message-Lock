@@ -5,7 +5,7 @@ Project for CS 2900
 Message Lock is a messaging software that accepts user input, encrypts it, and delivers the message.
 
 ## Features
--Accept User Input
+-Accept User Input \n
 -Encrypt User Input
 -Show encrypted Message
 -Decrypt message

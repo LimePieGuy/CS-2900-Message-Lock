@@ -1,1 +1,3 @@
-
+"""
+Encrypt the sent message
+"""

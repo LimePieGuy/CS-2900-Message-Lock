@@ -1,3 +1,0 @@
-"""
-Encrypt the sent message
-"""

@@ -8,10 +8,8 @@
 # - Secure nonce generation
 # - Encryption key handling
 
-
 def encrypt_message():
     pass
-
 
 def decrypt_message():
     pass

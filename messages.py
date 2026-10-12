@@ -1,19 +1,14 @@
 from datetime import datetime, timezone
-
 from fastapi import APIRouter, HTTPException
-
 from schemas import MessageCreate, MessageResponse
-
 
 router = APIRouter(
     prefix="/messages",
     tags=["Messages"]
 )
 
-
 # Temporary storage until the database section is completed.
 messages = []
-
 
 @router.post("/", response_model=MessageResponse)
 def send_message(message: MessageCreate):
@@ -29,11 +24,9 @@ def send_message(message: MessageCreate):
 
     return new_message
 
-
 @router.get("/", response_model=list[MessageResponse])
 def get_messages():
     return messages
-
 
 @router.get("/{message_id}", response_model=MessageResponse)
 def get_message(message_id: int):

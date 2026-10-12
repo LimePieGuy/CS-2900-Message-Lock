@@ -1,7 +1,5 @@
 from datetime import datetime
-
 from pydantic import BaseModel, Field
-
 
 class MessageCreate(BaseModel):
     sender_id: int
@@ -10,7 +8,6 @@ class MessageCreate(BaseModel):
         min_length=1,
         max_length=2000
     )
-
 
 class MessageResponse(BaseModel):
     id: int

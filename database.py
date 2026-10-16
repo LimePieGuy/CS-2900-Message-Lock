@@ -3,11 +3,11 @@ from pathlib import Path
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Store the database in the MessageLock project folder, unless
-# MESSAGELOCK_DATABASE_PATH points somewhere else (the tests use this).
+# Store the database in the project folder but for tests so I don't have to create a separate test database. The tests override this path to a temporary file.
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_PATH = Path(
-    os.environ.get("MESSAGELOCK_DATABASE_PATH", BASE_DIR / "messagelock.db"))
+    os.environ.get("MESSAGELOCK_DATABASE_PATH", BASE_DIR / "messagelock.db")
+)
 DATABASE_URL = f"sqlite:///{DATABASE_PATH.resolve().as_posix()}"
 
 class Base(DeclarativeBase):

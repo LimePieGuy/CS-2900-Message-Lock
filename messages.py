@@ -5,6 +5,7 @@ from auth import get_current_user
 from database import get_database
 from models import Message, User
 from schemas import MessageCreate, MessageResponse
+from crypto import encrypt_message, decrypt_message
 
 router = APIRouter(
     prefix="/messages",
@@ -34,7 +35,11 @@ def send_message(
     new_message = Message(
         sender_id=current_user.id,
         recipient_id=recipient.id,
-        content=message.content
+        content=encrypt_message(
+            message.content,
+            current_user.id,
+            recipient.id
+        )
     )
 
     db.add(new_message)
@@ -46,7 +51,30 @@ def send_message(
         db.rollback()
         raise
 
-    return new_message
+    return decrypted_response(new_message)
+
+
+def decrypted_response(message: Message) -> MessageResponse:
+    """Decrypt content for the response without changing the database."""
+    try:
+        plaintext = decrypt_message(
+            message.content,
+            message.sender_id,
+            message.recipient_id
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=500,
+            detail="Message could not be verified or decrypted."
+        ) from None
+
+    return MessageResponse(
+        id=message.id,
+        sender_id=message.sender_id,
+        recipient_id=message.recipient_id,
+        content=plaintext,
+        created_at=message.created_at
+    )
 
 @router.get("/", response_model=list[MessageResponse])
 def get_messages(
@@ -55,12 +83,14 @@ def get_messages(
 ):
     """List messages the logged-in user has sent or received."""
 
-    return db.query(Message).filter(
+    messages = db.query(Message).filter(
         or_(
             Message.sender_id == current_user.id,
             Message.recipient_id == current_user.id
         )
     ).order_by(Message.created_at, Message.id).all()
+
+    return [decrypted_response(message) for message in messages]
 
 @router.get("/{message_id}", response_model=MessageResponse)
 def get_message(
@@ -82,4 +112,4 @@ def get_message(
             detail="Message not found"
         )
 
-    return message
+    return decrypted_response(message)

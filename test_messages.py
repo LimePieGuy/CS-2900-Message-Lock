@@ -5,13 +5,15 @@ import os
 import tempfile
 import unittest
 
-# auth.py validates this during import. This test-only value is never used by the application outside this test process.
+# This is test-only, never used by the application outside this test process.
 os.environ["MESSAGELOCK_SECRET_KEY"] = (
     "test-only-secret-key-that-is-long-enough-for-the-app"
 )
 
-# Set the database override before importing the app/database modules so all
-# API requests use this temporary file instead of the real messagelock.db.
+# Setting key here so tests never use the real key from .env
+os.environ["MESSAGELOCK_ENCRYPTION_KEY"] = "0123456789abcdef" * 4
+
+# Sets the database override before importing the app/database modules so all API requests use this instead of the real messagelock.db.
 TEST_DATABASE_DIRECTORY = tempfile.TemporaryDirectory()
 atexit.register(TEST_DATABASE_DIRECTORY.cleanup)
 os.environ["MESSAGELOCK_DATABASE_PATH"] = os.path.join(
@@ -20,7 +22,8 @@ os.environ["MESSAGELOCK_DATABASE_PATH"] = os.path.join(
 
 from fastapi.testclient import TestClient
 
-from database import Base, engine
+from crypto import decrypt_message
+from database import Base, SessionLocal, engine
 from main import app
 import models
 
@@ -151,6 +154,66 @@ class MessagingApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["content"], "Still here")
+
+    def send_from_alice_to_bob(self, content):
+        response = self.client.post(
+            "/messages/",
+            json={"recipient_id": self.bob_id, "content": content},
+            headers=self.auth_header(self.alice_token),
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        return response.json()["id"]
+
+    def test_messages_are_encrypted_in_database(self):
+        message_id = self.send_from_alice_to_bob("Top secret plans")
+
+        with SessionLocal() as db:
+            stored = db.get(models.Message, message_id)
+
+        self.assertNotIn("Top secret plans", stored.content)
+        self.assertEqual(
+            decrypt_message(stored.content, self.alice_id, self.bob_id),
+            "Top secret plans",
+        )
+
+    def test_tampered_message_is_rejected(self):
+        message_id = self.send_from_alice_to_bob("Original")
+
+        # Replace the first character so the stored ciphertext no longer matches its authentication tag.
+        with SessionLocal() as db:
+            stored = db.get(models.Message, message_id)
+            first = "B" if stored.content[0] == "A" else "A"
+            stored.content = first + stored.content[1:]
+            db.commit()
+
+        response = self.client.get(
+            f"/messages/{message_id}",
+            headers=self.auth_header(self.bob_token),
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json()["detail"],
+            "Message could not be verified or decrypted.",
+        )
+
+    def test_reassigned_message_is_rejected(self):
+        message_id = self.send_from_alice_to_bob("From Alice")
+
+        # Make the message look like it came from Bob instead of Alice.
+        with SessionLocal() as db:
+            stored = db.get(models.Message, message_id)
+            stored.sender_id, stored.recipient_id = self.bob_id, self.alice_id
+            db.commit()
+
+        response = self.client.get(
+            f"/messages/{message_id}",
+            headers=self.auth_header(self.alice_token),
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json()["detail"],
+            "Message could not be verified or decrypted.",
+        )
 
 
 if __name__ == "__main__":
